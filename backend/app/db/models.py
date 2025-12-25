@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Column, Integer, Text, Boolean, Timestamp, ForeignKey, UniqueConstraint
+    Column, Integer, Text, Boolean, DateTime, ForeignKey, UniqueConstraint
 )
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.sql import func
@@ -54,12 +54,12 @@ class LoadVoter(Base):
     mode = Column(Text, nullable=False, default="public")
 
     consent = Column(Boolean, nullable=False)
-    consent_at = Column(Timestamp(timezone=False), nullable=False)
+    consent_at = Column(DateTime(timezone=True), nullable=False)
     consent_ip = Column(Text, nullable=False)
     consent_user_agent = Column(Text, nullable=False)
 
-    created_at = Column(Timestamp(timezone=False), nullable=False, server_default=func.now())
-    updated_at = Column(Timestamp(timezone=False), nullable=False, server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     coordinator = relationship("Coordinator")
     leader = relationship("Leader")
