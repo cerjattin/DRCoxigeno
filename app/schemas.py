@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-
+from typing import Optional
 
 class RegisterVoterIn(BaseModel):
     # document es TEXT pero lo quieres numérico
@@ -21,4 +21,12 @@ class RegisterVoterIn(BaseModel):
 
 class RegisterVoterOut(BaseModel):
     status: str
+    message: str | None = None
+
+class LinkResolveOut(BaseModel):
+    valid: bool
+    leaderCode: int | None = None
+    coordinatorCode: int | None = None
+    leaderName: str | None = None
+    coordinatorName: str | None = None
     message: str | None = None

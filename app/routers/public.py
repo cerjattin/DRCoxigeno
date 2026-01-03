@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert
 
 from app.db.session import get_db
-from app.db.models import LoadVoter, Neighborhood, Leader
-from app.schemas import RegisterVoterIn, RegisterVoterOut
+from app.db.models import LoadVoter, Neighborhood, Leader,Coordinator
+from app.schemas import RegisterVoterIn, RegisterVoterOut, LinkResolveOut
 from app.core.captcha import verify_turnstile
 
 import os
@@ -28,6 +28,37 @@ def validate_numeric(value: str, field: str):
 def should_bypass_captcha() -> bool:
     return os.getenv("PYTEST_CURRENT_TEST") is not None or os.getenv("TURNSTILE_TEST_BYPASS") == "1"
 
+@router.get("/link/resolve", response_model=LinkResolveOut)
+def resolve_link(
+    leader: int = Query(..., description="ID del líder (leaderCode)"),
+    coord: int = Query(..., description="ID del coordinador (coordinatorCode)"),
+    db: Session = Depends(get_db),
+):
+    # 1) Validar que el líder exista
+    leader_obj = db.query(Leader).filter(Leader.id == leader).first()
+    if not leader_obj:
+        return LinkResolveOut(valid=False, message="Líder no encontrado.")
+
+    # 2) Validar que el coordinador exista
+    coord_obj = db.query(Coordinator).filter(Coordinator.id == coord).first()
+    if not coord_obj:
+        return LinkResolveOut(valid=False, message="Coordinador no encontrado.")
+
+    # 3) Validar relación líder -> coordinador
+    if leader_obj.coordinator_id != coord_obj.id:
+        return LinkResolveOut(
+            valid=False,
+            message="El líder no pertenece a este coordinador.",
+        )
+
+    # 4) OK: devolvemos info para UI
+    return LinkResolveOut(
+        valid=True,
+        leaderCode=leader_obj.id,
+        coordinatorCode=coord_obj.id,
+        leaderName=leader_obj.name,
+        coordinatorName=coord_obj.name,
+    )
 
 @router.post(
     "/voters/register",
@@ -37,7 +68,7 @@ def should_bypass_captcha() -> bool:
 def register_voter(
     payload: RegisterVoterIn,
     request: Request,
-    mode: str = Query(default="public", pattern="^(public|brigadista)$"),
+    mode: str = Query(default="public", pattern="^(public|brigadista|leader_link)$"),
     db: Session = Depends(get_db),
 ):
     # 1) Validaciones básicas
@@ -51,6 +82,17 @@ def register_voter(
     leader = db.query(Leader).filter(Leader.id == payload.leader_id).first()
     if not leader:
         raise HTTPException(status_code=422, detail="Líder inválido")
+    
+    if payload.coordinator_id is not None:
+        coord = db.query(Coordinator).filter(Coordinator.id == payload.coordinator_id).first()
+        if not coord:
+            raise HTTPException(status_code=422, detail="Coordinador inválido")
+
+        if leader.coordinator_id != coord.id:
+            raise HTTPException(
+                status_code=422,
+                detail="El líder no pertenece al coordinador indicado",
+            )
 
     # 3) Validación relacional municipio -> barrio
     neighborhood = db.query(Neighborhood).filter(Neighborhood.id == payload.neighborhood_id).first()
