@@ -1,37 +1,31 @@
 import requests
-from fastapi import HTTPException
+from typing import Tuple
+
 from app.core.config import TURNSTILE_SECRET_KEY
-import os
 
 TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 
-def verify_turnstile(token: str, ip: str):
-    """
-    Verifica captcha Cloudflare Turnstile
-    """
-    if os.getenv("TURNSTILE_TEST_BYPASS") == "1":
-      return True
+def verify_turnstile(token: str, remoteip: str | None = None) -> Tuple[bool, str]:
+    if not TURNSTILE_SECRET_KEY:
+        return False, "TURNSTILE_SECRET_KEY no configurada"
 
-    if not token:
-        raise HTTPException(status_code=400, detail="Captcha faltante")
+    if not token or not isinstance(token, str):
+        return False, "captcha_token vacío"
 
-    data = {
-        "secret": TURNSTILE_SECRET_KEY,
-        "response": token,
-        "remoteip": ip,
-    }
+    data = {"secret": TURNSTILE_SECRET_KEY, "response": token}
+    if remoteip:
+        data["remoteip"] = remoteip
 
     try:
-        response = requests.post(TURNSTILE_VERIFY_URL, data=data, timeout=5)
-        result = response.json()
-    except Exception:
-        raise HTTPException(
-            status_code=502,
-            detail="Error validando captcha"
-        )
+        r = requests.post(TURNSTILE_VERIFY_URL, data=data, timeout=8)
+        r.raise_for_status()
+        payload = r.json()
+    except Exception as e:
+        # Evita 500 por fallos de red/timeout/DNS/etc.
+        return False, f"Error verificando captcha: {type(e).__name__}"
 
-    if not result.get("success"):
-        raise HTTPException(
-            status_code=400,
-            detail="Captcha inválido"
-        )
+    if payload.get("success") is True:
+        return True, "ok"
+
+    codes = payload.get("error-codes") or []
+    return False, f"Captcha inválido ({','.join(codes)})"

@@ -24,7 +24,6 @@ class Leader(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
 
-    # ✅ Nuevo: el líder pertenece a un coordinador
     coordinator_id = Column(Integer, ForeignKey("coordinators.id"), nullable=False)
     coordinator = relationship("Coordinator")
 
@@ -34,7 +33,6 @@ class Municipality(Base):
     id = Column(Integer, primary_key=True)
     name = Column(Text, nullable=False)
 
-    # ✅ Nuevo: relación formal con department
     department_id = Column(Integer, ForeignKey("department.id"), nullable=False)
     department_rel = relationship("Department")
 
@@ -44,24 +42,24 @@ class Neighborhood(Base):
     id = Column(Integer, primary_key=True)
     name = Column(Text, nullable=False)
 
-    # OJO: en tu DB es id_municipality (no municipality_id)
     id_municipality = Column(Integer, ForeignKey("municipality.id"), nullable=False)
     municipality = relationship("Municipality")
 
 
 class LoadVoter(Base):
     __tablename__ = "load_voters"
-    __table_args__ = (
-        UniqueConstraint("document", name="uq_load_voters_document"),
-    )
+    __table_args__ = (UniqueConstraint("document", name="uq_load_voters_document"),)
 
     id = Column(Integer, primary_key=True)
+
+    # Mantengo default=1 para tu lógica, aunque la DB lo acepte nulo.
     cluster = Column(Integer, nullable=False, default=1)
 
-    # ✅ Quitamos coordinator del votante: solo leader, y leader ya apunta a coordinator
     id_leader = Column(Integer, ForeignKey("leader.id"), nullable=False)
 
-    document = Column(Text, nullable=False)
+    # documento es string en BD
+    document = Column(String, nullable=False)
+
     first_name = Column(Text, nullable=False)
     last_name = Column(Text, nullable=False)
     address = Column(Text, nullable=False)
@@ -80,7 +78,6 @@ class LoadVoter(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    # ✅ Relaciones válidas (sin Coordinator directo)
     leader = relationship("Leader")
     municipality = relationship("Municipality")
     neighborhood = relationship("Neighborhood")

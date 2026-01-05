@@ -8,5 +8,10 @@ if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL no está definido en el entorno")
 
 TURNSTILE_SECRET_KEY = os.getenv("TURNSTILE_SECRET_KEY")
-if not TURNSTILE_SECRET_KEY:
-    raise RuntimeError("TURNSTILE_SECRET_KEY no definido")
+
+def should_bypass_captcha() -> bool:
+    return os.getenv("PYTEST_CURRENT_TEST") is not None or os.getenv("TURNSTILE_TEST_BYPASS") == "1"
+
+# En producción, exigir TURNSTILE_SECRET_KEY (si no hay bypass)
+if not TURNSTILE_SECRET_KEY and not should_bypass_captcha():
+    raise RuntimeError("TURNSTILE_SECRET_KEY no definido (y no hay bypass activo)")
