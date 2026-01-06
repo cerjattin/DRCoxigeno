@@ -78,7 +78,8 @@ def register_voter(
     if not leader:
         raise HTTPException(status_code=422, detail="Líder inválido")
 
-    if payload.coordinator_id is not None:
+    coord_id = getattr(payload, "coordinator_id", None)
+    if coord_id is not None:
         coord = db.query(Coordinator).filter(Coordinator.id == payload.coordinator_id).first()
         if not coord:
             raise HTTPException(status_code=422, detail="Coordinador inválido")

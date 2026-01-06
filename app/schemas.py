@@ -8,7 +8,7 @@ class RegisterVoterIn(BaseModel):
     last_name: str = Field(min_length=1, max_length=100)
     address: str = Field(min_length=1, max_length=200)
     phone: str = Field(min_length=7, max_length=20)
-
+    coordinator_id: Optional[int] = None
     municipality_id: int
     neighborhood_id: int
 
