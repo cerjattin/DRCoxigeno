@@ -16,7 +16,15 @@ logger = logging.getLogger("uvicorn.error")
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
-    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+    # ✅ imprime SIEMPRE tipo y mensaje (aunque Render corte el stack)
+    logger.error(
+        "Unhandled error on %s %s -> %s: %s",
+        request.method,
+        request.url.path,
+        exc.__class__.__name__,
+        str(exc),
+        exc_info=True,  # intenta incluir stack completo
+    )
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 # 🔐 CORS
