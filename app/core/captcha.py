@@ -1,18 +1,29 @@
-import requests
+import os
 from typing import Tuple
 
-from app.core.config import TURNSTILE_SECRET_KEY
+import requests
 
 TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 
-def verify_turnstile(token: str, remoteip: str | None = None) -> Tuple[bool, str]:
-    if not TURNSTILE_SECRET_KEY:
+
+def verify_turnstile(token: str, remoteip: str | None = None, ip: str | None = None) -> Tuple[bool, str]:
+    """
+    Verifica Cloudflare Turnstile.
+    - Devuelve (ok, msg)
+    - NUNCA debe tumbar el endpoint con 500
+    - Acepta `ip` como alias de `remoteip` para compatibilidad
+    """
+    secret = os.getenv("TURNSTILE_SECRET_KEY")
+    if not secret:
         return False, "TURNSTILE_SECRET_KEY no configurada"
+
+    if ip and not remoteip:
+        remoteip = ip
 
     if not token or not isinstance(token, str):
         return False, "captcha_token vacío"
 
-    data = {"secret": TURNSTILE_SECRET_KEY, "response": token}
+    data = {"secret": secret, "response": token}
     if remoteip:
         data["remoteip"] = remoteip
 
@@ -21,7 +32,7 @@ def verify_turnstile(token: str, remoteip: str | None = None) -> Tuple[bool, str
         r.raise_for_status()
         payload = r.json()
     except Exception as e:
-        # Evita 500 por fallos de red/timeout/DNS/etc.
+        # Nunca dejes que esto cause 500
         return False, f"Error verificando captcha: {type(e).__name__}"
 
     if payload.get("success") is True:

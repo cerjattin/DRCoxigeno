@@ -1,20 +1,16 @@
-from datetime import datetime, timezone
-import logging
-import os
-
+from datetime import datetime
 from fastapi import APIRouter, Depends, Request, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.db.session import get_db
 from app.db.models import LoadVoter, Neighborhood, Leader, Coordinator
 from app.schemas import RegisterVoterIn, RegisterVoterOut, LinkResolveOut
 from app.core.captcha import verify_turnstile
-from app.core.config import should_bypass_captcha
+
+import os
 
 router = APIRouter(prefix="/public", tags=["public"])
-logger = logging.getLogger("uvicorn.error")
 
 
 def get_client_ip(request: Request) -> str:
@@ -25,8 +21,12 @@ def get_client_ip(request: Request) -> str:
 
 
 def validate_numeric(value: str, field: str):
-    if not isinstance(value, str) or not value.isdigit():
+    if not value.isdigit():
         raise HTTPException(status_code=422, detail=f"El campo '{field}' debe contener solo números")
+
+
+def should_bypass_captcha() -> bool:
+    return os.getenv("PYTEST_CURRENT_TEST") is not None or os.getenv("TURNSTILE_TEST_BYPASS") == "1"
 
 
 @router.get("/link/resolve", response_model=LinkResolveOut)
@@ -68,23 +68,12 @@ def register_voter(
 ):
     # 1) Validaciones básicas
     validate_numeric(payload.document, "document")
-
-    phone_norm = payload.phone.replace("+", "").replace(" ", "")
-    validate_numeric(phone_norm, "phone")
+    validate_numeric(payload.phone.replace("+", "").replace(" ", ""), "phone")
 
     if payload.consent is not True:
         raise HTTPException(status_code=422, detail="Debes aceptar el consentimiento para continuar")
 
-    # 2) Captcha (solo si NO hay bypass)
-    if not should_bypass_captcha():
-        ok, msg = verify_turnstile(
-            payload.captcha_token,
-            request.client.host if request.client else None,
-        )
-        if not ok:
-            raise HTTPException(status_code=400, detail=msg)
-
-    # 3) Validar leader/coordinator
+    # 2) Validar leader existe (y por extensión su coordinator)
     leader = db.query(Leader).filter(Leader.id == payload.leader_id).first()
     if not leader:
         raise HTTPException(status_code=422, detail="Líder inválido")
@@ -97,7 +86,7 @@ def register_voter(
         if leader.coordinator_id != coord.id:
             raise HTTPException(status_code=422, detail="El líder no pertenece al coordinador indicado")
 
-    # 4) Validación relacional municipio -> barrio
+    # 3) Validación relacional municipio -> barrio
     neighborhood = db.query(Neighborhood).filter(Neighborhood.id == payload.neighborhood_id).first()
     if not neighborhood:
         raise HTTPException(status_code=422, detail="Barrio inválido")
@@ -105,15 +94,21 @@ def register_voter(
     if neighborhood.id_municipality != payload.municipality_id:
         raise HTTPException(status_code=422, detail="El barrio no pertenece al municipio seleccionado")
 
-    # 5) Duplicado (document) para mensaje
+    # 4) Duplicado (document) para mensaje
     existing_voter = db.query(LoadVoter.id).filter(LoadVoter.document == payload.document).first()
     was_existing = existing_voter is not None
 
-    # 6) UPSERT
-    now = datetime.now(timezone.utc)
+    # 5) Captcha (solo una vez)
     client_ip = get_client_ip(request)
+    if not should_bypass_captcha():
+        ok, msg = verify_turnstile(payload.captcha_token, remoteip=client_ip)
+        if not ok:
+            raise HTTPException(status_code=400, detail=msg)
+
+    now = datetime.utcnow()
     user_agent = request.headers.get("user-agent", "unknown")
 
+    # 6) UPSERT (ON CONFLICT document)
     stmt = insert(LoadVoter).values(
         cluster=1,
         id_leader=payload.leader_id,
@@ -155,18 +150,9 @@ def register_voter(
     try:
         db.execute(stmt)
         db.commit()
-    except IntegrityError:
+    except Exception as e:
         db.rollback()
-        logger.exception("IntegrityError guardando load_voters (FK/constraint/not-null).")
-        raise HTTPException(status_code=409, detail="Conflicto de datos al guardar. Verifica IDs y duplicados.")
-    except SQLAlchemyError:
-        db.rollback()
-        logger.exception("SQLAlchemyError guardando load_voters.")
-        raise HTTPException(status_code=500, detail="Error de base de datos al guardar.")
-    except Exception:
-        db.rollback()
-        logger.exception("Error inesperado guardando load_voters.")
-        raise HTTPException(status_code=500, detail="Error inesperado guardando el registro.")
+        raise HTTPException(status_code=500, detail="Error guardando el registro") from e
 
     if was_existing:
         return RegisterVoterOut(status="updated", message="Ya estabas registrado, actualizamos tu información.")
