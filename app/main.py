@@ -7,8 +7,7 @@ from app.routers.catalog import router as catalog_router
 
 app = FastAPI(title="Voter Registration API", version="1.0.0")
 
-# CORS (define CORS_ORIGINS en Render)
-origins = os.getenv("CORS_ORIGINS", "*")
+# 🔐 CORS
 ALLOWED_ORIGINS = [
     "https://frontend-registro-drc.vercel.app",
     "http://localhost:5173",
@@ -18,7 +17,7 @@ ALLOWED_ORIGINS = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=False,  # pon True solo si usas cookies/sesión
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
