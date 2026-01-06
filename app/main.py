@@ -9,12 +9,16 @@ app = FastAPI(title="Voter Registration API", version="1.0.0")
 
 # CORS (define CORS_ORIGINS en Render)
 origins = os.getenv("CORS_ORIGINS", "*")
-allowed_origins = [o.strip() for o in origins.split(",")] if origins else ["*"]
+ALLOWED_ORIGINS = [
+    "https://frontend-registro-drc.vercel.app",
+    "http://localhost:5173",
+    "http://localhost:3000",
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins if allowed_origins != ["*"] else ["*"],
-    allow_credentials=True,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=False,  # pon True solo si usas cookies/sesión
     allow_methods=["*"],
     allow_headers=["*"],
 )
