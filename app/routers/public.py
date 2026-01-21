@@ -5,8 +5,15 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.db.session import get_db
 from app.db.models import LoadVoter, Neighborhood, Leader, Coordinator
-from app.schemas import RegisterVoterIn, RegisterVoterOut, LinkResolveOut
+from app.schemas import (
+    RegisterVoterIn,
+    RegisterVoterOut,
+    LinkResolveOut,
+    RegisterLeaderIn,
+    RegisterLeaderOut,
+)
 from app.core.captcha import verify_turnstile
+from app.core.config import COORDINATOR_DEFAULT_ID
 
 import os
 
@@ -52,6 +59,50 @@ def resolve_link(
         coordinatorCode=coord_obj.id,
         leaderName=leader_obj.name,
         coordinatorName=coord_obj.name,
+    )
+
+
+@router.post(
+    "/leaders/register",
+    response_model=RegisterLeaderOut,
+    summary="Registro de líder desde el panel (coordinador fijo por configuración)",
+)
+def register_leader(
+    payload: RegisterLeaderIn,
+    db: Session = Depends(get_db),
+):
+    """Crea un líder y lo asocia a un coordinador preconfigurado.
+
+    - El coordinador se define en COORDINATOR_DEFAULT_ID (env).
+    - El frontend no envía coordinator_id.
+    """
+
+    coord = db.query(Coordinator).filter(Coordinator.id == COORDINATOR_DEFAULT_ID).first()
+    if not coord:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"Configuración inválida: no existe coordinador con id={COORDINATOR_DEFAULT_ID}. "
+                "Crea el coordinador o ajusta COORDINATOR_DEFAULT_ID."
+            ),
+        )
+
+    leader = Leader(name=payload.name.strip(), coordinator_id=coord.id)
+    db.add(leader)
+    try:
+        db.commit()
+        db.refresh(leader)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Error creando el líder") from e
+
+    return RegisterLeaderOut(
+        status="created",
+        leaderCode=leader.id,
+        coordinatorCode=coord.id,
+        leaderName=leader.name,
+        coordinatorName=coord.name,
+        message="Líder creado correctamente",
     )
 
 
