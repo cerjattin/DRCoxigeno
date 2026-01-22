@@ -9,10 +9,6 @@ if not DATABASE_URL:
 
 TURNSTILE_SECRET_KEY = os.getenv("TURNSTILE_SECRET_KEY")
 
-# ID del coordinador "pre-cargado" para registros de líderes desde el panel.
-# Esto permite que el frontend NO solicite ni exponga el coordinador.
-COORDINATOR_DEFAULT_ID = int(os.getenv("COORDINATOR_DEFAULT_ID", "1"))
-
 def should_bypass_captcha() -> bool:
     return os.getenv("PYTEST_CURRENT_TEST") is not None or os.getenv("TURNSTILE_TEST_BYPASS") == "1"
 

@@ -5,15 +5,8 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.db.session import get_db
 from app.db.models import LoadVoter, Neighborhood, Leader, Coordinator
-from app.schemas import (
-    RegisterVoterIn,
-    RegisterVoterOut,
-    LinkResolveOut,
-    RegisterLeaderIn,
-    RegisterLeaderOut,
-)
+from app.schemas import RegisterVoterIn, RegisterVoterOut, LinkResolveOut, RegisterLeaderIn, RegisterLeaderOut
 from app.core.captcha import verify_turnstile
-from app.core.config import COORDINATOR_DEFAULT_ID
 
 import os
 
@@ -62,49 +55,49 @@ def resolve_link(
     )
 
 
-@router.post(
-    "/leaders/register",
-    response_model=RegisterLeaderOut,
-    summary="Registro de líder desde el panel (coordinador fijo por configuración)",
-)
+
+
+@router.post("/leaders/register", response_model=RegisterLeaderOut, summary="Registro de líderes (autogestionado)")
 def register_leader(
     payload: RegisterLeaderIn,
     db: Session = Depends(get_db),
 ):
-    """Crea un líder y lo asocia a un coordinador preconfigurado.
+    # coordinator_id por defecto (precargado en backend)
+    default_coord_id = int(os.getenv("COORDINATOR_DEFAULT_ID", "1"))
+    coord_id = payload.coordinator_id or default_coord_id
 
-    - El coordinador se define en COORDINATOR_DEFAULT_ID (env).
-    - El frontend no envía coordinator_id.
-    """
-
-    coord = db.query(Coordinator).filter(Coordinator.id == COORDINATOR_DEFAULT_ID).first()
+    # Validar coordinador existe
+    coord = db.query(Coordinator).filter(Coordinator.id == coord_id).first()
     if not coord:
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                f"Configuración inválida: no existe coordinador con id={COORDINATOR_DEFAULT_ID}. "
-                "Crea el coordinador o ajusta COORDINATOR_DEFAULT_ID."
-            ),
+        raise HTTPException(status_code=422, detail="Coordinador inválido")
+
+    # Verificar que el líder NO exista
+    exists = db.query(Leader.id).filter(Leader.id == payload.id).first()
+    if exists:
+        return RegisterLeaderOut(
+            created=False,
+            message="El líder ya existe",
+            leaderCode=payload.id,
+            coordinatorCode=coord.id,
+            leaderName=db.query(Leader).filter(Leader.id == payload.id).first().name,
+            coordinatorName=coord.name,
         )
 
-    leader = Leader(name=payload.name.strip(), coordinator_id=coord.id)
-    db.add(leader)
+    leader = Leader(id=payload.id, name=payload.name.strip(), coordinator_id=coord.id)
     try:
+        db.add(leader)
         db.commit()
-        db.refresh(leader)
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail="Error creando el líder") from e
+        raise HTTPException(status_code=500, detail="Error creando líder") from e
 
     return RegisterLeaderOut(
-        status="created",
+        created=True,
         leaderCode=leader.id,
         coordinatorCode=coord.id,
         leaderName=leader.name,
         coordinatorName=coord.name,
-        message="Líder creado correctamente",
     )
-
 
 @router.post(
     "/voters/register",

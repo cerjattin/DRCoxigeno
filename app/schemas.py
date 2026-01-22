@@ -1,25 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Optional
 
-
-class RegisterLeaderIn(BaseModel):
-    """Registro de líderes desde el Panel de Líder.
-
-    Nota: el coordinador NO se envía desde el frontend; queda fijado por
-    configuración del backend (COORDINATOR_DEFAULT_ID).
-    """
-
-    name: str = Field(min_length=2, max_length=120)
-
-
-class RegisterLeaderOut(BaseModel):
-    status: str
-    leaderCode: int
-    coordinatorCode: int
-    leaderName: str
-    coordinatorName: str | None = None
-    message: str | None = None
-
 class RegisterVoterIn(BaseModel):
     # document es TEXT pero lo quieres numérico
     document: str = Field(min_length=6, max_length=20)
@@ -49,3 +30,17 @@ class LinkResolveOut(BaseModel):
     leaderName: str | None = None
     coordinatorName: str | None = None
     message: str | None = None
+
+class RegisterLeaderIn(BaseModel):
+    id: int
+    name: str = Field(min_length=1, max_length=120)
+    coordinator_id: int | None = None
+
+
+class RegisterLeaderOut(BaseModel):
+    created: bool
+    message: str | None = None
+    leaderCode: int | None = None
+    coordinatorCode: int | None = None
+    leaderName: str | None = None
+    coordinatorName: str | None = None
